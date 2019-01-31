@@ -1,3 +1,78 @@
+mod frequency {
+  use std::collections::HashMap;
+
+  // Taken from the source of: http://practicalcryptography.com/cryptanalysis/text-characterisation/chi-squared-statistic/
+  fn letter_frequency(c: &char) -> f32 {
+    match c {
+      'a' | 'A' => 0.08167,
+      'b' | 'B' => 0.01492,
+      'c' | 'C' => 0.02782,
+      'd' | 'D' => 0.04253,
+      'e' | 'E' => 0.12702,
+      'f' | 'F' => 0.02228,
+      'g' | 'G' => 0.02015,
+      'h' | 'H' => 0.06094,
+      'i' | 'I' => 0.06966,
+      'j' | 'J' => 0.00153,
+      'k' | 'K' => 0.00772,
+      'l' | 'L' => 0.04025,
+      'm' | 'M' => 0.02406,
+      'n' | 'N' => 0.06749,
+      'o' | 'O' => 0.07507,
+      'p' | 'P' => 0.01929,
+      'q' | 'Q' => 0.00095,
+      'r' | 'R' => 0.05987,
+      's' | 'S' => 0.06327,
+      't' | 'T' => 0.09056,
+      'u' | 'U' => 0.02758,
+      'v' | 'V' => 0.00978,
+      'w' | 'W' => 0.02360,
+      'x' | 'X' => 0.00150,
+      'y' | 'Y' => 0.01974,
+      'z' | 'Z' => 0.00074,
+      _ => 0.0,
+    }
+  }
+
+  // A more restrictive version of the char#is_alphabetic
+  fn is_alphabetic(c: &char) -> bool {
+    letter_frequency(c) != 0.0
+  }
+
+  // As defined in: http://practicalcryptography.com/cryptanalysis/text-characterisation/chi-squared-statistic/
+  pub fn chi_squared(s: &str) -> f32 {
+    let mut sum = 0.0;
+    let mut letter_counts: HashMap<char, i32> = HashMap::new();
+    let mut len = 0;
+
+    for c in b'a'..=b'z' {
+      letter_counts.insert(c as char, 0);
+    }
+
+    for c in s.chars() {
+      if is_alphabetic(&c) {
+        len += 1;
+        let c = c.to_ascii_lowercase();
+        match letter_counts.get(&c) {
+          Some(count) => letter_counts.insert(c, count + 1),
+          None => panic!("Expected to have a count for {}", c),
+        };
+      }
+    }
+
+    let len = len as f32;
+    for c in b'a'..=b'z' {
+      let c = c as char;
+      let count = *letter_counts.get(&c).unwrap() as f32;
+      let expected_count = len * letter_frequency(&c);
+
+      sum += (count - expected_count).powf(2.0) / expected_count;
+    }
+
+    sum
+  }
+}
+
 mod utils {
   // top (leftmost) `hi` bits of v
   pub fn top_bits(v: u8, hi: u8) -> u8 {
@@ -12,6 +87,37 @@ mod utils {
 }
 
 mod xor {
+  use super::frequency;
+  use super::hex;
+
+  pub fn decrypt_single_byte_xor(input: &str) -> String {
+    let mut min_score: f32 = 1000.0;
+    let mut best_string = String::new();
+
+    for byte in 0..=255 {
+      let xored = hex::to_ascii_str(single_byte(input, byte));
+      let score = frequency::chi_squared(&xored);
+
+      if score < min_score {
+        min_score = score;
+        best_string = xored;
+      }
+    }
+
+    best_string
+  }
+
+  pub fn single_byte(lhs: &str, rhs: u8) -> Vec<u8> {
+    let lhs = super::hex::from_str(lhs);
+    let mut result = vec![];
+
+    for d in lhs {
+      result.push(d ^ rhs);
+    }
+
+    result
+  }
+
   pub fn fixed(lhs: &str, rhs: &str) -> Vec<u8> {
     let lhs = super::hex::from_str(lhs);
     let rhs = super::hex::from_str(rhs);
@@ -39,8 +145,17 @@ mod hex {
     to_u8(s)
   }
 
+  // u8 to hex string
   pub fn to_str(data: Vec<u8>) -> String {
     from_u8(data)
+  }
+
+  pub fn to_ascii_str(data: Vec<u8>) -> String {
+    let mut result = String::new();
+    for d in data {
+      result.push(d as char);
+    }
+    result
   }
 
   fn from_u8(data: Vec<u8>) -> String {
@@ -155,6 +270,7 @@ mod base64 {
 #[cfg(test)]
 mod test {
   use super::base64::*;
+  use super::frequency;
   use super::hex::*;
   use super::xor;
 
@@ -209,5 +325,21 @@ mod test {
       ),
       "746865206b696420646f6e277420706c6179"
     );
+  }
+
+  #[test]
+  fn test_chi_squared() {
+    // See: http://practicalcryptography.com/cryptanalysis/text-characterisation/chi-squared-statistic/
+    assert_eq!(
+      frequency::chi_squared("Defend the east wall of the castle"),
+      18.528309
+    );
+  }
+
+  #[test]
+  fn test_challenge3() {
+    let input = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
+    let decrypted = xor::decrypt_single_byte_xor(input);
+    assert_eq!(decrypted, "Cooking MC\'s like a pound of bacon");
   }
 }
