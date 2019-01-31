@@ -99,6 +99,7 @@ mod xor {
       let score = frequency::chi_squared(&xored);
 
       if score < min_score {
+        dbg!((min_score, best_string));
         min_score = score;
         best_string = xored;
       }
@@ -337,9 +338,28 @@ mod test {
   }
 
   #[test]
-  fn test_challenge3() {
+  fn challenge3() {
     let input = "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736";
     let decrypted = xor::decrypt_single_byte_xor(input);
     assert_eq!(decrypted, "Cooking MC\'s like a pound of bacon");
+  }
+
+  //  #[test]
+  fn challenge4() {
+    let input = include_str!("data/challenge4.txt");
+
+    let mut best_score = 1000.0;
+    let mut best_str = String::new();
+
+    for line in input.lines() {
+      let decrypted = dbg!(xor::decrypt_single_byte_xor(line));
+      let score = dbg!(frequency::chi_squared(&decrypted));
+      if score < best_score {
+        best_score = score;
+        best_str = decrypted;
+      }
+    }
+
+    assert_eq!(best_str, "Cooking MC\'s like a pound of bacon");
   }
 }
