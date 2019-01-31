@@ -1,7 +1,58 @@
+mod utils {
+  // top (leftmost) `hi` bits of v
+  pub fn top_bits(v: u8, hi: u8) -> u8 {
+    let lo = 8 - hi;
+    (v >> lo) & ((1 << hi) - 1)
+  }
+
+  // bottom (rightmost) `lo` bits of v
+  pub fn bottom_bits(v: u8, lo: u8) -> u8 {
+    v & ((1 << lo) - 1)
+  }
+}
+
+mod xor {
+  pub fn fixed(lhs: &str, rhs: &str) -> Vec<u8> {
+    let lhs = super::hex::from_str(lhs);
+    let rhs = super::hex::from_str(rhs);
+
+    if lhs.len() != rhs.len() {
+      panic!("Different lengths for input strings");
+    }
+
+    let mut result = vec![];
+    for idx in 0..lhs.len() {
+      result.push(lhs[idx] ^ rhs[idx]);
+    }
+
+    result
+  }
+
+  pub fn fixed_to_str(lhs: &str, rhs: &str) -> String {
+    super::hex::to_str(fixed(lhs, rhs))
+  }
+}
+
 mod hex {
   // hex string -> [u8]
   pub fn from_str(s: &str) -> Vec<u8> {
     to_u8(s)
+  }
+
+  pub fn to_str(data: Vec<u8>) -> String {
+    from_u8(data)
+  }
+
+  fn from_u8(data: Vec<u8>) -> String {
+    use super::utils::{bottom_bits, top_bits};
+    let mut result = String::new();
+
+    for d in data {
+      result.push(char_val(top_bits(d, 4)));
+      result.push(char_val(bottom_bits(d, 4)));
+    }
+
+    result
   }
 
   // convert len-2 input
@@ -18,6 +69,15 @@ mod hex {
     bytes
   }
 
+  // to lower hex val
+  fn char_val(d: u8) -> char {
+    match d {
+      0...9 => (b'0' + d) as char,
+      10...15 => (b'a' + (d - 10)) as char,
+      _ => panic!("Encountered invalid u8 for hex char val {}", d),
+    }
+  }
+
   fn hex_val(c: u8) -> u8 {
     match c {
       b'A'...b'F' => c - b'A' + 10,
@@ -26,7 +86,6 @@ mod hex {
       _ => panic!("Unexpected char: {}", c),
     }
   }
-
 }
 
 mod base64 {
@@ -56,32 +115,22 @@ mod base64 {
   }
 
   pub fn u8_8bit_to_6bit(data: Vec<u8>) -> Vec<u8> {
+    use super::utils::{bottom_bits, top_bits};
     let mut result = vec![];
     let mut val6bit;
 
     let mut remainder_bits = 0;
     let mut remainder = 0;
 
-    // top (leftmost) `hi` bits of v
-    fn top(v: u8, hi: u8) -> u8 {
-      let lo = 8 - hi;
-      (v >> lo) & ((1 << hi) - 1)
-    }
-
-    // bottom (rightmost) `lo` bits of v
-    fn bottom(v: u8, lo: u8) -> u8 {
-      v & ((1 << lo) - 1)
-    }
-
     for val8bit in data {
       let needed_bits = 6 - remainder_bits;
 
-      val6bit = (remainder << needed_bits) | top(val8bit, needed_bits);
+      val6bit = (remainder << needed_bits) | top_bits(val8bit, needed_bits);
 
       result.push(val6bit);
 
       remainder_bits = 8 - needed_bits;
-      remainder = bottom(val8bit, remainder_bits);
+      remainder = bottom_bits(val8bit, remainder_bits);
 
       if remainder_bits == 6 {
         result.push(remainder);
@@ -107,6 +156,7 @@ mod base64 {
 mod test {
   use super::base64::*;
   use super::hex::*;
+  use super::xor;
 
   #[test]
   fn test_u8_to_base64() {
@@ -147,6 +197,17 @@ mod test {
     assert_eq!(
       to_base64(from_str("49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d")),
       "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t"
+    );
+  }
+
+  #[test]
+  fn challenge2() {
+    assert_eq!(
+      xor::fixed_to_str(
+        "1c0111001f010100061a024b53535009181c",
+        "686974207468652062756c6c277320657965"
+      ),
+      "746865206b696420646f6e277420706c6179"
     );
   }
 }
