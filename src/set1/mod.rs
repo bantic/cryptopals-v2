@@ -30,7 +30,7 @@ mod frequency {
       'x' | 'X' => 0.00150,
       'y' | 'Y' => 0.01974,
       'z' | 'Z' => 0.00074,
-      _ => 0.0,
+      _ => 0.001, // about as common as a "z"
     }
   }
 
@@ -50,19 +50,19 @@ mod frequency {
     }
 
     for c in s.chars() {
+      if c == ' ' {
+        continue;
+      }
+      let c = c.to_ascii_lowercase();
       if is_alphabetic(&c) {
         len += 1;
-        let c = c.to_ascii_lowercase();
-        match letter_counts.get(&c) {
-          Some(count) => letter_counts.insert(c, count + 1),
-          None => panic!("Expected to have a count for {}", c),
-        };
       }
+      let v = letter_counts.entry(c).or_insert(0);
+      *v += 1;
     }
 
     let len = len as f32;
-    for c in b'a'..=b'z' {
-      let c = c as char;
+    for c in letter_counts.keys() {
       let count = *letter_counts.get(&c).unwrap() as f32;
       let expected_count = len * letter_frequency(&c);
 
@@ -99,7 +99,6 @@ mod xor {
       let score = frequency::chi_squared(&xored);
 
       if score < min_score {
-        dbg!((min_score, best_string));
         min_score = score;
         best_string = xored;
       }
@@ -331,10 +330,7 @@ mod test {
   #[test]
   fn test_chi_squared() {
     // See: http://practicalcryptography.com/cryptanalysis/text-characterisation/chi-squared-statistic/
-    assert_eq!(
-      frequency::chi_squared("Defend the east wall of the castle"),
-      18.528309
-    );
+    assert!(frequency::chi_squared("Defend the east wall of the castle") - 18.52831 < 0.01);
   }
 
   #[test]
@@ -344,7 +340,7 @@ mod test {
     assert_eq!(decrypted, "Cooking MC\'s like a pound of bacon");
   }
 
-  //  #[test]
+  #[test]
   fn challenge4() {
     let input = include_str!("data/challenge4.txt");
 
@@ -352,7 +348,7 @@ mod test {
     let mut best_str = String::new();
 
     for line in input.lines() {
-      let decrypted = dbg!(xor::decrypt_single_byte_xor(line));
+      let decrypted = xor::decrypt_single_byte_xor(line);
       let score = dbg!(frequency::chi_squared(&decrypted));
       if score < best_score {
         best_score = score;
@@ -360,6 +356,6 @@ mod test {
       }
     }
 
-    assert_eq!(best_str, "Cooking MC\'s like a pound of bacon");
+    assert_eq!(best_str, "Now that the party is jumping\n");
   }
 }
